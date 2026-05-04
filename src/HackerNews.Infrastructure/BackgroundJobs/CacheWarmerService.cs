@@ -1,5 +1,7 @@
+using System.Diagnostics;
 using HackerNews.Application.Interfaces;
 using HackerNews.Infrastructure.Configuration;
+using HackerNews.Infrastructure.Diagnostics;
 using HackerNews.Infrastructure.HackerNews;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,17 +44,15 @@ public sealed class CacheWarmerService(
         }
         catch (OperationCanceledException)
         {
-            // Shutdown.
         }
     }
 
     private async Task SafeWarmAsync(CancellationToken ct)
     {
+        using var activity = InfrastructureDiagnostics.ActivitySource.StartActivity("CacheWarmer.Warm");
+        activity?.SetTag("hn.warm_top_n", _opts.WarmTopN);
         try
         {
-            // Force a fresh pull of the best-stories ID list, then ask the
-            // service to fetch the top N — this populates the per-item cache
-            // via the cached decorator.
             await cache.RemoveByTagAsync(CachedHackerNewsClient.IdsTag, ct).ConfigureAwait(false);
 
             using var scope = scopeFactory.CreateScope();
@@ -67,7 +67,7 @@ public sealed class CacheWarmerService(
         }
         catch (Exception ex)
         {
-            // Never let a transient warm failure crash the host — try again next tick.
+            activity?.SetStatus(ActivityStatusCode.Error, ex.Message);
             logger.LogWarning(ex, "Cache warm iteration failed");
         }
     }

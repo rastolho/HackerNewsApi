@@ -1,3 +1,5 @@
+using HackerNews.Application.Diagnostics;
+using HackerNews.Infrastructure.Diagnostics;
 using OpenTelemetry.Logs;
 using OpenTelemetry.Metrics;
 using OpenTelemetry.Resources;
@@ -13,9 +15,6 @@ public static class OpenTelemetryExtensions
     {
         var serviceVersion = typeof(Program).Assembly.GetName().Version?.ToString() ?? "0.0.0";
 
-        // Only wire the OTLP exporter when an endpoint is actually configured —
-        // otherwise dev runs and tests would emit "connection refused" noise on
-        // every export tick.
         var hasOtlpEndpoint = !string.IsNullOrWhiteSpace(
             Environment.GetEnvironmentVariable("OTEL_EXPORTER_OTLP_ENDPOINT"));
 
@@ -33,6 +32,8 @@ public static class OpenTelemetryExtensions
             .WithTracing(tracing =>
             {
                 tracing
+                    .AddSource(ApplicationDiagnostics.SourceName)
+                    .AddSource(InfrastructureDiagnostics.SourceName)
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation();
                 if (hasOtlpEndpoint) tracing.AddOtlpExporter();
@@ -43,8 +44,6 @@ public static class OpenTelemetryExtensions
                     .AddAspNetCoreInstrumentation()
                     .AddHttpClientInstrumentation()
                     .AddRuntimeInstrumentation()
-                    // Polly retry / circuit-breaker counters surfaced by the
-                    // standard resilience handler.
                     .AddMeter("Microsoft.Extensions.Http.Resilience")
                     .AddMeter("Polly");
                 if (hasOtlpEndpoint) metrics.AddOtlpExporter();

@@ -1,6 +1,7 @@
 using HackerNews.Application.Interfaces;
 using HackerNews.Domain.Stories;
 using HackerNews.Infrastructure.Configuration;
+using HackerNews.Infrastructure.Diagnostics;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 
@@ -26,25 +27,42 @@ public sealed class CachedHackerNewsClient(
 
     private static string ItemKey(long id) => $"hn:item:{id}";
 
-    public async Task<IReadOnlyList<long>> GetBestStoryIdsAsync(CancellationToken ct) =>
-        await cache.GetOrCreateAsync(
+    public async Task<IReadOnlyList<long>> GetBestStoryIdsAsync(CancellationToken ct)
+    {
+        using var activity = InfrastructureDiagnostics.ActivitySource.StartActivity("Cache.GetBestStoryIds");
+        activity?.SetTag("cache.key", IdsCacheKey);
+        var hit = true;
+        var result = await cache.GetOrCreateAsync(
             IdsCacheKey,
-            inner,
-            static async (client, token) =>
+            async token =>
             {
-                var ids = await client.GetBestStoryIdsAsync(token).ConfigureAwait(false);
+                hit = false;
+                var ids = await inner.GetBestStoryIdsAsync(token).ConfigureAwait(false);
                 return ids as long[] ?? [.. ids];
             },
             new HybridCacheEntryOptions { Expiration = TimeSpan.FromSeconds(_opts.IdListCacheSeconds) },
             tags: IdsTags,
             cancellationToken: ct).ConfigureAwait(false);
+        activity?.SetTag("cache.hit", hit);
+        return result;
+    }
 
-    public async Task<Story?> GetStoryAsync(long id, CancellationToken ct) =>
-        await cache.GetOrCreateAsync(
+    public async Task<Story?> GetStoryAsync(long id, CancellationToken ct)
+    {
+        using var activity = InfrastructureDiagnostics.ActivitySource.StartActivity("Cache.GetStory");
+        activity?.SetTag("hn.story_id", id);
+        var hit = true;
+        var result = await cache.GetOrCreateAsync(
             ItemKey(id),
-            (inner, id),
-            static async (state, token) => await state.inner.GetStoryAsync(state.id, token).ConfigureAwait(false),
+            async token =>
+            {
+                hit = false;
+                return await inner.GetStoryAsync(id, token).ConfigureAwait(false);
+            },
             new HybridCacheEntryOptions { Expiration = TimeSpan.FromMinutes(_opts.ItemCacheMinutes) },
             tags: ItemsTags,
             cancellationToken: ct).ConfigureAwait(false);
+        activity?.SetTag("cache.hit", hit);
+        return result;
+    }
 }
