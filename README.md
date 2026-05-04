@@ -277,49 +277,6 @@ overridden by environment variables (e.g. `HackerNews__FetchConcurrency=20`).
 
 ---
 
-## Assumptions
-
-- "Best stories" = the IDs returned by `beststories.json` (max 200), filtered
-  to `type == "story"`. Jobs, polls, comments, and deleted items are excluded.
-- `commentCount` maps to HN's `descendants` field (total reply count, not just
-  top-level comments — the documented HN convention).
-- Story `time` is mapped from Unix seconds to ISO 8601 with offset
-  (`DateTimeOffset` round-trip format), matching the example in the brief.
-- A single-instance deployment is acceptable for the exercise. For horizontal
-  scale, see *Future work*.
-- It's preferable to serve a slightly-stale top list than to overload HN. Two
-  user requests in the same 60 s window get the same ranking — this is the
-  point.
-
----
-
-## What I would do with more time
-
-- **Distributed cache layer.** Swap the HybridCache L2 to Redis so multiple
-  instances behind a load balancer share warm data instead of each one
-  hammering HN independently.
-- **`stale-while-error` / `stale-while-revalidate`.** Keep the previous good
-  response in a long-TTL bucket and serve it if a refresh fails or hasn't
-  finished — survives a full HN outage gracefully.
-- **Custom OTel instrumentation.** The auto-instrumentation already covers HTTP
-  in/out and runtime; a dedicated `ActivitySource` and `Meter` for the
-  application service would give cache hit-ratio, fetch fan-out duration, and
-  per-story timings as first-class signals.
-- **Health checks.** Add an `IHealthCheck` that pings HN with a tight timeout,
-  exposed at `/health/ready` so a load balancer can pull traffic if HN is down.
-- **Stronger contract tests.** Use `WireMock.Net` to script realistic upstream
-  scenarios (slow responses, 5xx, malformed JSON) and assert the resilience
-  pipeline behaves.
-- **Rate-limiting middleware.** Defend the API itself against abusive callers
-  (`AddRateLimiter` with a token bucket per IP).
-- **Source-generated JSON serialization.** `[JsonSerializable]` on the DTOs to
-  cut allocations on the hot path.
-- **CI.** A trivial GitHub Actions workflow running `dotnet test` on push.
-- **Containerise.** A multi-stage `Dockerfile` and a `docker-compose.yml` for
-  one-command local runs.
-
----
-
 ## Project layout
 
 ```
