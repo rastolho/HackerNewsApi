@@ -66,7 +66,7 @@ In `Development`, the API exposes:
 dotnet test
 ```
 
-12 unit + integration tests covering ordering, DTO mapping, cache behaviour,
+13 unit + integration tests covering ordering, DTO mapping, cache behaviour,
 input validation, and HTTP responses.
 
 ---
@@ -222,7 +222,33 @@ cache.
 `AddStandardResilienceHandler` from
 `Microsoft.Extensions.Http.Resilience` wraps the typed `HttpClient` with the
 recommended pipeline: per-attempt timeout, retry with exponential backoff +
-jitter, and a circuit breaker. A total request timeout sits on top.
+jitter, and a circuit breaker. A total request timeout sits on top. The package
+is Polly v8 under the hood, so retry / circuit-breaker telemetry surfaces
+through the `Polly` and `Microsoft.Extensions.Http.Resilience` meters (see
+*Observability* below).
+
+### Observability
+
+OpenTelemetry is wired in [Observability/OpenTelemetryExtensions.cs](src/HackerNews.Api/Observability/OpenTelemetryExtensions.cs)
+and called from `Program.cs` before the composition root. It produces:
+
+- **Traces** — ASP.NET Core (incoming requests) and `HttpClient` (outbound calls
+  to Hacker News). Polly retries appear as separate child spans, so you can see
+  exactly when the resilience pipeline kicked in.
+- **Metrics** — ASP.NET Core, `HttpClient`, .NET runtime (GC, threadpool,
+  exceptions), plus the `Polly` and `Microsoft.Extensions.Http.Resilience`
+  meters for retry counts and circuit-breaker state.
+- **Logs** — `ILogger` output is bridged to OTel so log records carry the
+  active trace/span IDs.
+
+The OTLP exporter is only registered when `OTEL_EXPORTER_OTLP_ENDPOINT` is set,
+so local dev runs and the test suite don't spam connection-refused warnings
+when no collector is around. To export, point it at any OTLP-compatible
+backend (Jaeger, Tempo, SigNoz, Honeycomb, …):
+
+```bash
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 dotnet run --project src/HackerNews.Api
+```
 
 ### Validation
 
@@ -275,9 +301,10 @@ overridden by environment variables (e.g. `HackerNews__FetchConcurrency=20`).
 - **`stale-while-error` / `stale-while-revalidate`.** Keep the previous good
   response in a long-TTL bucket and serve it if a refresh fails or hasn't
   finished — survives a full HN outage gracefully.
-- **OpenTelemetry.** Traces around the HN client and metrics for cache
-  hit-ratio, fetch latency, and outbound call volume. Today only `ILogger` is
-  wired up.
+- **Custom OTel instrumentation.** The auto-instrumentation already covers HTTP
+  in/out and runtime; a dedicated `ActivitySource` and `Meter` for the
+  application service would give cache hit-ratio, fetch fan-out duration, and
+  per-story timings as first-class signals.
 - **Health checks.** Add an `IHealthCheck` that pings HN with a tight timeout,
   exposed at `/health/ready` so a load balancer can pull traffic if HN is down.
 - **Stronger contract tests.** Use `WireMock.Net` to script realistic upstream
@@ -320,6 +347,7 @@ src/
   HackerNews.Api/                          ── web layer.
     Controllers/BestStoriesController.cs   thin controller, validation, output cache
     Models/StoryResponse.cs                outbound DTO + mapping from Story
+    Observability/OpenTelemetryExtensions  OTel traces / metrics / logs wiring
     Program.cs                             composition root
 
 tests/HackerNews.Api.Tests/

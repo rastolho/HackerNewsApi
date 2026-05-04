@@ -1,9 +1,12 @@
+using HackerNews.Api.Observability;
 using HackerNews.Api.OpenApi;
 using HackerNews.Application;
 using HackerNews.Infrastructure;
 using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.AddObservability();
 
 // Composition root — each layer registers its own services via an extension method.
 builder.Services.AddHackerNewsApplication(builder.Configuration);
