@@ -1,0 +1,31 @@
+# Build artefacts
+**/bin/
+**/obj/
+**/out/
+**/TestResults/
+
+# IDE / editor
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# VCS
+.git/
+.gitignore
+.gitattributes
+
+# Tests are not built inside the image.
+tests/
+
+# Docs / Docker config (not needed in the build context).
+README.md
+*.md
+Dockerfile
+.dockerignore
+docker-compose*.yml
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,39 @@
+## .NET
+bin/
+obj/
+out/
+*.user
+*.suo
+*.pidb
+*.userprefs
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Bb]uild/
+[Bb]in/
+[Oo]bj/
+
+## Rider / VS
+.idea/
+.vs/
+
+## VS Code
+.vscode/
+
+## Logs
+*.log
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Claude Code (local-only)
+.claude/settings.local.json
+
+## Test results
+TestResults/
+coverage/
+*.trx
+*.coverage
+*.coveragexml
